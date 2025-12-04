@@ -35,20 +35,26 @@
         const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
         const IconAlert = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mb-2 opacity-50"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>;
         const IconCalendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>;
+        const IconTrophy = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
 
         function App() {
-            const [activeTab, setActiveTab] = useState('calculator'); 
+            const [activeTab, setActiveTab] = useState('calculator'); // calculator, panic, annual
             const [targetGrade, setTargetGrade] = useState(4.0);
             const [grades, setGrades] = useState([{ id: 1, value: '' }]);
             const [simulatedGrade, setSimulatedGrade] = useState(4.0);
             
-            // Anual
+            // Estado Anual
             const [semester1Avg, setSemester1Avg] = useState('');
             const [neededSem2, setNeededSem2] = useState(null);
             const [projectedAnnual, setProjectedAnnual] = useState(null);
+            
+            // Estado Promoción (Veredicto)
+            const [otherReds, setOtherReds] = useState(0);
+            const [generalAvgInput, setGeneralAvgInput] = useState('');
+            const [verdict, setVerdict] = useState(null);
 
             const [result, setResult] = useState(null);
-            const [currentAverage, setCurrentAverage] = useState(0); // Este es el promedio calculado de la Tab 1
+            const [currentAverage, setCurrentAverage] = useState(0); 
             const [projectedAverage, setProjectedAverage] = useState(0);
 
             // Escala
@@ -57,47 +63,30 @@
             const minGrade = isScale100 ? 10 : 1.0;
             const step = isScale100 ? 5 : 0.1;
 
+            // Handlers
             const addGradeRow = () => {
                 const newId = grades.length > 0 ? Math.max(...grades.map(g => g.id)) + 1 : 1;
                 setGrades([...grades, { id: newId, value: '' }]);
             };
-
-            const removeGradeRow = (id) => {
-                setGrades(grades.filter(g => g.id !== id));
-            };
-
+            const removeGradeRow = (id) => setGrades(grades.filter(g => g.id !== id));
             const updateGrade = (id, value) => {
-                const newGrades = grades.map(g => {
-                    if (g.id === id) return { ...g, value: value };
-                    return g;
-                });
+                const newGrades = grades.map(g => (g.id === id ? { ...g, value: value } : g));
                 setGrades(newGrades);
             };
 
-            useEffect(() => {
-                calculate();
-            }, [grades, targetGrade, simulatedGrade]);
-
-            // Efecto separado para actualizar cálculo anual cuando cambian los promedios
-            useEffect(() => {
-                calculateAnnual();
-            }, [semester1Avg, currentAverage, targetGrade]);
+            // Efectos
+            useEffect(() => calculate(), [grades, targetGrade, simulatedGrade]);
+            useEffect(() => calculateAnnualAndVerdict(), [semester1Avg, currentAverage, targetGrade, otherReds, generalAvgInput]);
 
             const calculate = () => {
-                let sumVal = 0;
-                let count = 0;
+                let sumVal = 0, count = 0;
                 grades.forEach(g => {
                     const val = parseFloat(g.value);
-                    if (!isNaN(val)) {
-                        sumVal += val;
-                        count++;
-                    }
+                    if (!isNaN(val)) { sumVal += val; count++; }
                 });
-
                 const avg = count > 0 ? (sumVal / count).toFixed(2) : 0;
                 setCurrentAverage(avg);
 
-                // Calculadora basica
                 const totalItems = count + 1;
                 const needed = (targetGrade * totalItems) - sumVal;
                 
@@ -110,38 +99,71 @@
                     else setResult({ type: 'normal', val: neededRounded, msg: 'Esta es la nota que necesitas.' });
                 }
 
-                // Pánico
                 const simVal = parseFloat(simulatedGrade);
                 const projAvg = (sumVal + simVal) / (count + 1);
                 setProjectedAverage(isNaN(projAvg) ? 0 : projAvg.toFixed(2));
             };
 
-            const calculateAnnual = () => {
-                // 1. Calcular Nota Necesaria (Meta)
+            const calculateAnnualAndVerdict = () => {
+                // 1. Calculo Anual de la Asignatura Actual
+                let currentAnnual = null;
                 if(semester1Avg === '' || isNaN(parseFloat(semester1Avg))) {
                     setNeededSem2(null);
                     setProjectedAnnual(null);
+                    setVerdict(null); // Sin sem1 no hay veredicto posible
                     return;
                 }
+                
                 const s1 = parseFloat(semester1Avg);
                 const needed = (targetGrade * 2) - s1;
                 setNeededSem2(needed.toFixed(1));
 
-                // 2. Calcular Proyección Actual (Realidad)
                 const curSem2 = parseFloat(currentAverage);
+                
                 if (!isNaN(curSem2) && curSem2 > 0) {
-                    const annualProj = (s1 + curSem2) / 2;
-                    setProjectedAnnual(annualProj.toFixed(2));
+                    currentAnnual = parseFloat(((s1 + curSem2) / 2).toFixed(2));
+                    setProjectedAnnual(currentAnnual);
                 } else {
                     setProjectedAnnual(null);
+                    setVerdict(null);
+                    return;
                 }
-            }
+
+                // 2. Calculo de Veredicto (Aprobación Global)
+                // Si no hay promedio general ingresado, usamos el de la asignatura actual como estimación (o pedimos input)
+                const genAvg = generalAvgInput !== '' ? parseFloat(generalAvgInput) : currentAnnual;
+                
+                // Determinar si esta asignatura es roja
+                const currentIsRed = currentAnnual < 4.0;
+                const totalReds = otherReds + (currentIsRed ? 1 : 0);
+
+                let passed = false;
+                let reason = "";
+
+                if (totalReds === 0) {
+                    passed = true;
+                    reason = "Sin rojos. ¡Aprobado!";
+                } else if (totalReds === 1) {
+                    if (genAvg >= 4.5) { passed = true; reason = `Con 1 rojo, tu promedio (${genAvg}) es ≥ 4.5`; }
+                    else { passed = false; reason = `Con 1 rojo necesitas 4.5 (Tienes ${genAvg})`; }
+                } else if (totalReds === 2) {
+                    if (genAvg >= 5.0) { passed = true; reason = `Con 2 rojos, tu promedio (${genAvg}) es ≥ 5.0`; }
+                    else { passed = false; reason = `Con 2 rojos necesitas 5.0 (Tienes ${genAvg})`; }
+                } else {
+                    passed = false;
+                    reason = "Con más de 2 rojos se repite automáticamente.";
+                }
+
+                setVerdict({ passed, reason, totalReds, genAvg });
+            };
 
             const handleReset = () => {
                 setGrades([{ id: 1, value: '' }]);
                 setTargetGrade(4.0);
                 setSimulatedGrade(4.0);
                 setSemester1Avg('');
+                setOtherReds(0);
+                setGeneralAvgInput('');
             };
 
             const getHeaderColor = () => {
@@ -159,7 +181,7 @@
                             <IconGraduation />
                             <h1 className="text-2xl font-bold">Salva el Semestre</h1>
                             <p className="text-white/80 text-sm opacity-90">
-                                {activeTab === 'panic' ? 'Simulador de Escenarios' : activeTab === 'annual' ? 'Meta Anual' : 'Calculadora de Notas'}
+                                {activeTab === 'panic' ? 'Simulador de Escenarios' : activeTab === 'annual' ? 'Veredicto Final' : 'Calculadora de Notas'}
                             </p>
                             <button onClick={handleReset} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/30 transition" title="Reiniciar">
                                 <IconRotate />
@@ -169,31 +191,31 @@
                         {/* Tabs */}
                         <div className="flex border-b border-slate-100">
                             <button onClick={() => setActiveTab('calculator')} className={`flex-1 py-3 text-xs md:text-sm font-semibold flex items-center justify-center gap-1 transition-colors ${activeTab === 'calculator' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-400 hover:text-slate-600'}`}>
-                                <IconCalculator /> Notas Sem 2
+                                <IconCalculator /> Notas
                             </button>
                             <button onClick={() => setActiveTab('panic')} className={`flex-1 py-3 text-xs md:text-sm font-semibold flex items-center justify-center gap-1 transition-colors ${activeTab === 'panic' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-slate-400 hover:text-slate-600'}`}>
                                 <IconActivity /> Pánico
                             </button>
                             <button onClick={() => setActiveTab('annual')} className={`flex-1 py-3 text-xs md:text-sm font-semibold flex items-center justify-center gap-1 transition-colors ${activeTab === 'annual' ? 'text-orange-500 border-b-2 border-orange-500 bg-orange-50/50' : 'text-slate-400 hover:text-slate-600'}`}>
-                                <IconCalendar /> Anual
+                                <IconTrophy /> Anual
                             </button>
                         </div>
 
                         <div className="p-6 space-y-6">
                             
-                            {/* Input Promedio Objetivo (Global) */}
+                            {/* Input Global */}
                             <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
-                                <label className="text-sm font-semibold text-slate-700 pl-1">Nota para aprobar:</label>
+                                <label className="text-sm font-semibold text-slate-700 pl-1">Nota para aprobar (Azul):</label>
                                 <input type="number" step="0.1" value={targetGrade} onChange={(e) => setTargetGrade(parseFloat(e.target.value))} className="w-20 p-1.5 text-center text-lg font-bold text-slate-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500" />
                             </div>
 
-                            {/* --- TAB: CALCULATOR (NOTAS) --- */}
+                            {/* --- TAB: NOTAS --- */}
                             {activeTab === 'calculator' && (
                                 <>
                                     <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 animate-fade-in">
                                         <div className="flex justify-between items-center mb-3">
                                             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Notas 2º Semestre</h3>
-                                            <span className="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full text-slate-400 font-mono">Actual: {currentAverage || '--'}</span>
+                                            <span className="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-full text-slate-400 font-mono">Prom: {currentAverage || '--'}</span>
                                         </div>
                                         <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                                             {grades.map((grade, index) => (
@@ -201,43 +223,33 @@
                                                     <div className="relative flex-1">
                                                         <input type="number" placeholder={`Nota ${index + 1}`} value={grade.value} onChange={(e) => updateGrade(grade.id, e.target.value)} className="w-full p-2 bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none text-center font-semibold" />
                                                     </div>
-                                                    <button onClick={() => removeGradeRow(grade.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
-                                                        <IconTrash />
-                                                    </button>
+                                                    <button onClick={() => removeGradeRow(grade.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><IconTrash /></button>
                                                 </div>
                                             ))}
-                                            <button onClick={addGradeRow} className="w-full py-2 flex items-center justify-center gap-1 text-sm text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 dashed border-slate-300 mt-2">
-                                                <IconPlus /> Agregar nota
-                                            </button>
+                                            <button onClick={addGradeRow} className="w-full py-2 flex items-center justify-center gap-1 text-sm text-slate-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-slate-200 dashed border-slate-300 mt-2"><IconPlus /> Agregar nota</button>
                                         </div>
                                     </div>
-                                    {/* Resultado Calculadora */}
                                     <div className="mt-4 animate-fade-in">
                                         {result && (
                                             <div className={`relative p-6 rounded-2xl text-center transition-all duration-300 ${result.type === 'impossible' ? 'bg-red-50 text-red-800 border border-red-200' : ''} ${result.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : ''} ${result.type === 'normal' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : ''} ${result.type === 'neutral' ? 'bg-slate-100 text-slate-500' : ''}`}>
                                                 {result.type !== 'neutral' ? (
                                                     <>
-                                                        <p className="uppercase tracking-wider text-[10px] font-bold opacity-70 mb-1">Nota Necesaria (Restante)</p>
+                                                        <p className="uppercase tracking-wider text-[10px] font-bold opacity-70 mb-1">Nota Necesaria</p>
                                                         <div className="text-5xl font-black mb-2 tracking-tighter">{result.val}</div>
                                                         <p className="text-xs font-medium opacity-90">{result.msg}</p>
                                                     </>
-                                                ) : (
-                                                    <div className="flex flex-col items-center py-2">
-                                                        <IconAlert />
-                                                        <p className="text-sm">{result.msg}</p>
-                                                    </div>
-                                                )}
+                                                ) : <div className="flex flex-col items-center py-2"><IconAlert /><p className="text-sm">{result.msg}</p></div>}
                                             </div>
                                         )}
                                     </div>
                                 </>
                             )}
 
-                            {/* --- TAB: PANIC MODE --- */}
+                            {/* --- TAB: PANICO --- */}
                             {activeTab === 'panic' && (
                                 <div className="animate-fade-in">
                                     <div className="bg-purple-50 rounded-2xl p-5 border border-purple-100">
-                                        <p className="text-center text-purple-800 font-semibold mb-4 text-sm">Si en la próxima prueba me saco un...</p>
+                                        <p className="text-center text-purple-800 font-semibold mb-4 text-sm">Si en la próxima prueba saco...</p>
                                         <div className="flex items-center justify-center gap-4 mb-6">
                                             <button onClick={() => setSimulatedGrade(prev => Math.max(minGrade, parseFloat((prev - step).toFixed(1))))} className="w-8 h-8 rounded-full bg-white text-purple-600 shadow flex items-center justify-center font-bold hover:bg-purple-100">-</button>
                                             <div className="text-4xl font-black text-purple-700 w-24 text-center">{typeof simulatedGrade === 'number' ? simulatedGrade.toFixed(1) : simulatedGrade}</div>
@@ -253,80 +265,85 @@
                                 </div>
                             )}
 
-                            {/* --- TAB: ANNUAL MODE (ACTUALIZADO) --- */}
+                            {/* --- TAB: ANUAL (ACTUALIZADA) --- */}
                             {activeTab === 'annual' && (
                                 <div className="animate-fade-in space-y-4">
+                                    {/* 1. Datos de la Asignatura Actual */}
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="bg-orange-50 rounded-2xl p-4 border border-orange-100 flex flex-col justify-center items-center">
-                                            <label className="block text-center text-orange-800 font-semibold mb-2 text-xs uppercase">
-                                                Prom. 1er Sem
-                                            </label>
-                                            <input 
-                                                type="number" 
-                                                placeholder="--"
-                                                value={semester1Avg} 
-                                                onChange={(e) => setSemester1Avg(e.target.value)} 
-                                                className="w-full p-2 text-center text-xl font-bold text-orange-900 bg-white border-2 border-orange-200 rounded-xl focus:outline-none focus:border-orange-500 transition-all placeholder:text-orange-200" 
-                                            />
+                                            <label className="block text-center text-orange-800 font-semibold mb-2 text-xs uppercase">Prom. 1er Sem</label>
+                                            <input type="number" placeholder="--" value={semester1Avg} onChange={(e) => setSemester1Avg(e.target.value)} className="w-full p-2 text-center text-xl font-bold text-orange-900 bg-white border-2 border-orange-200 rounded-xl focus:outline-none focus:border-orange-500 transition-all placeholder:text-orange-200" />
                                         </div>
                                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center items-center">
-                                            <label className="block text-center text-slate-500 font-semibold mb-2 text-xs uppercase">
-                                                Actual 2do Sem
-                                            </label>
-                                            <div className={`text-xl font-bold ${currentAverage > 0 ? 'text-indigo-600' : 'text-slate-300'}`}>
-                                                {currentAverage > 0 ? currentAverage : '--'}
-                                            </div>
+                                            <label className="block text-center text-slate-500 font-semibold mb-2 text-xs uppercase">Actual 2do Sem</label>
+                                            <div className={`text-xl font-bold ${currentAverage > 0 ? 'text-indigo-600' : 'text-slate-300'}`}>{currentAverage > 0 ? currentAverage : '--'}</div>
                                             <p className="text-[10px] text-slate-400 mt-1">Desde pestaña Notas</p>
                                         </div>
                                     </div>
+                                    
+                                    {/* 2. Proyección Actual */}
+                                    {projectedAnnual ? (
+                                        <>
+                                            <div className={`p-4 rounded-xl border-l-4 shadow-sm flex justify-between items-center transition-colors ${projectedAnnual >= 4.0 ? 'bg-indigo-50 border-indigo-500 text-indigo-900' : 'bg-red-50 border-red-500 text-red-900'}`}>
+                                                <div>
+                                                    <p className="text-xs font-bold uppercase opacity-70">Promedio Anual (Esta asignatura)</p>
+                                                    <p className="text-xs opacity-80">{projectedAnnual >= 4.0 ? 'Esta la pasas ✅' : 'Esta te da rojo ❌'}</p>
+                                                </div>
+                                                <div className="text-3xl font-black">{projectedAnnual}</div>
+                                            </div>
 
-                                    {/* Tarjeta de Proyección Actual */}
-                                    {projectedAnnual && (
-                                        <div className={`p-4 rounded-xl border-l-4 shadow-sm flex justify-between items-center ${parseFloat(projectedAnnual) >= targetGrade ? 'bg-green-50 border-green-500 text-green-800' : 'bg-red-50 border-red-500 text-red-800'}`}>
-                                            <div>
-                                                <p className="text-xs font-bold uppercase opacity-70">Situación Hoy</p>
-                                                <p className="text-xs opacity-80">Si cierra el año ahora:</p>
+                                            {/* 3. Panel de Contexto Global */}
+                                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 text-center border-b pb-2">Simulador de Repitencia</h3>
+                                                
+                                                <div className="flex gap-4 mb-4">
+                                                    <div className="flex-1">
+                                                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase text-center">Otros Rojos</label>
+                                                        <div className="flex items-center justify-center bg-slate-50 rounded-lg p-1">
+                                                            <button onClick={() => setOtherReds(Math.max(0, otherReds - 1))} className="w-6 h-6 rounded bg-white shadow text-slate-600 hover:text-orange-500 font-bold">-</button>
+                                                            <span className="flex-1 text-center font-bold text-slate-700">{otherReds}</span>
+                                                            <button onClick={() => setOtherReds(otherReds + 1)} className="w-6 h-6 rounded bg-white shadow text-slate-600 hover:text-orange-500 font-bold">+</button>
+                                                        </div>
+                                                        <p className="text-[9px] text-slate-400 text-center mt-1 leading-tight">Sin contar esta</p>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase text-center">Promedio General</label>
+                                                        <input 
+                                                            type="number" 
+                                                            step="0.1"
+                                                            placeholder={projectedAnnual} // Placeholder es el promedio actual
+                                                            value={generalAvgInput} 
+                                                            onChange={(e) => setGeneralAvgInput(e.target.value)} 
+                                                            className="w-full h-[34px] text-center text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-orange-500" 
+                                                        />
+                                                        <p className="text-[9px] text-slate-400 text-center mt-1 leading-tight">De todas tus materias</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* 4. Veredicto Final */}
+                                                {verdict && (
+                                                    <div className={`rounded-xl p-3 text-center transition-all animate-fade-in ${verdict.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                        <p className="text-lg font-black uppercase mb-1">{verdict.passed ? '¡PASAS DE CURSO! 🎉' : 'REPIETES EL AÑO 💀'}</p>
+                                                        <p className="text-xs font-medium opacity-90 leading-snug">{verdict.reason}</p>
+                                                        <div className="mt-2 text-[10px] opacity-60 font-mono">
+                                                            Total Rojos: {verdict.totalReds} | Prom. Gen: {verdict.genAvg}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="text-right">
-                                                <div className="text-3xl font-black leading-none">{projectedAnnual}</div>
-                                                <div className="text-[10px] font-bold mt-1 uppercase">{parseFloat(projectedAnnual) >= targetGrade ? 'Aprobado' : 'Reprobado'}</div>
-                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center p-6 bg-slate-50 rounded-2xl border border-slate-100 text-slate-400">
+                                            <IconCalendar />
+                                            <p className="text-sm mt-2">Ingresa tu promedio del 1er semestre para ver si pasas.</p>
                                         </div>
                                     )}
-
-                                    {/* Tarjeta de Meta */}
-                                    {neededSem2 && (
-                                        <div className={`relative p-5 rounded-2xl text-center transition-all duration-300 border ${parseFloat(neededSem2) > maxGrade ? 'bg-red-50 text-red-800 border-red-200' : 'bg-white border-orange-200 shadow-sm'}`}>
-                                            <p className="uppercase tracking-wider text-[10px] font-bold text-orange-500 mb-1">
-                                                Meta Semestre 2
-                                            </p>
-                                            <div className="text-4xl font-black mb-1 tracking-tighter text-slate-800">
-                                                {neededSem2}
-                                            </div>
-                                            <p className="text-xs font-medium text-slate-500">
-                                                {parseFloat(neededSem2) > maxGrade 
-                                                    ? 'Necesitas un milagro (o hablar con el profe)' 
-                                                    : parseFloat(neededSem2) <= minGrade
-                                                        ? 'Ya tienes el año ganado'
-                                                        : 'Promedio final necesario en el 2º semestre'}
-                                            </p>
-                                        </div>
-                                    )}
-
-                                     {!neededSem2 && (
-                                         <div className="text-center p-6 bg-slate-50 rounded-2xl border border-slate-100 text-slate-400">
-                                             <IconCalendar />
-                                             <p className="text-sm mt-2">Ingresa tu promedio del 1er semestre</p>
-                                         </div>
-                                     )}
                                 </div>
                             )}
 
                         </div>
                     </div>
-                    <div className="text-center mt-6 text-slate-400 text-sm font-medium">
-                        desarrollado por ProfeAle
-                    </div>
+                    <div className="text-center mt-6 text-slate-400 text-sm font-medium">desarrollado por ProfeAle</div>
                 </div>
             );
         }
