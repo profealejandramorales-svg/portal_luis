@@ -59,8 +59,9 @@
             const [verdict, setVerdict] = useState(null);
 
             // Estado Promoción (ACTA FINAL)
+            // IMPORTANTE: gradeCount inicializado en 5
             const [subjects, setSubjects] = useState([
-                { id: 1, name: 'Matemáticas', avg: '', gradeCount: 5 }, // Default 5 grades
+                { id: 1, name: 'Matemáticas', avg: '', gradeCount: 5 }, 
                 { id: 2, name: 'Lenguaje', avg: '', gradeCount: 5 },
                 { id: 3, name: 'Historia', avg: '', gradeCount: 5 },
                 { id: 4, name: 'Ciencias', avg: '', gradeCount: 5 },
@@ -90,6 +91,7 @@
                 setSubjects([...subjects, { id: newId, name: '', avg: '', gradeCount: 5 }]);
             };
             const removeSubject = (id) => setSubjects(subjects.filter(s => s.id !== id));
+            
             const updateSubject = (id, field, value) => {
                 const newSubs = subjects.map(s => (s.id === id ? { ...s, [field]: value } : s));
                 setSubjects(newSubs);
@@ -222,13 +224,16 @@
                 setPromoStatus({ generalAvg, redCount, passed, message, requiredAvg });
             };
 
+            // Lógica para calcular qué nota falta
             const calculateSavingGrade = (avg, n) => {
-                // (avg * n + X) / (n+1) = 4.0
-                // avg * n + X = 4.0 * (n+1)
-                // X = 4.0 * (n+1) - avg * n
                 if(!avg || !n) return null;
+                // Fórmula: (PromedioActual * N_notas + NotaX) / (N_notas + 1) = 4.0
                 const needed = (4.0 * (n + 1)) - (avg * n);
-                return needed.toFixed(1);
+                const result = needed.toFixed(1);
+                
+                if (result > 7.0) return "> 7.0 (Imposible)";
+                if (result < 1.0) return "1.0 (Ya pasaste)";
+                return result;
             };
 
             const handleReset = () => {
@@ -455,7 +460,8 @@
                                             {subjects.map((sub, index) => {
                                                 const val = parseFloat(sub.avg);
                                                 const isRed = !isNaN(val) && val < 4.0;
-                                                const savingGrade = isRed ? calculateSavingGrade(val, sub.gradeCount) : null;
+                                                const gradeCount = sub.gradeCount || 5; 
+                                                const savingGrade = isRed ? calculateSavingGrade(val, gradeCount) : null;
                                                 
                                                 return (
                                                     <div key={sub.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex flex-col gap-2">
@@ -472,17 +478,19 @@
 
                                                         {/* Calculadora de Salvación (Solo si es rojo) */}
                                                         {isRed && (
-                                                            <div className="bg-red-50 rounded-lg p-2 flex items-center justify-between text-xs animate-fade-in border border-red-100">
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-bold text-red-800 uppercase text-[10px]">¿Con cuántas notas?</span>
-                                                                    <div className="flex items-center gap-2 mt-1">
-                                                                        <input type="number" min="1" max="20" value={sub.gradeCount} onChange={(e) => updateSubject(sub.id, 'gradeCount', parseInt(e.target.value))} className="w-10 p-1 text-center border border-red-200 rounded bg-white font-bold text-red-700" />
-                                                                        <span className="text-red-600">notas actuales</span>
+                                                            <div className="bg-yellow-50 rounded-lg p-3 flex flex-row items-center justify-between text-xs animate-fade-in border border-yellow-200">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <span className="font-bold text-yellow-800 uppercase text-[10px] tracking-wide">¿N° de notas actuales?</span>
+                                                                    <div className="flex items-center">
+                                                                        <button onClick={() => updateSubject(sub.id, 'gradeCount', Math.max(1, gradeCount - 1))} className="w-6 h-6 bg-white border border-yellow-300 rounded text-yellow-700 font-bold">-</button>
+                                                                        <span className="w-8 text-center font-bold text-yellow-900 text-lg">{gradeCount}</span>
+                                                                        <button onClick={() => updateSubject(sub.id, 'gradeCount', gradeCount + 1)} className="w-6 h-6 bg-white border border-yellow-300 rounded text-yellow-700 font-bold">+</button>
                                                                     </div>
                                                                 </div>
-                                                                <div className="text-right">
-                                                                    <span className="block text-[9px] uppercase font-bold text-red-500">Agregando 1 nota necesitas:</span>
-                                                                    <span className="text-xl font-black text-red-600">{savingGrade && parseFloat(savingGrade) <= 7.0 ? savingGrade : '😱'}</span>
+                                                                <div className="text-right pl-2 border-l border-yellow-200/50">
+                                                                    <span className="block text-[9px] uppercase font-bold text-yellow-600 mb-0.5">Para subir a 4.0</span>
+                                                                    <span className="block text-[10px] uppercase font-bold text-yellow-600 mb-0.5">Necesitas un:</span>
+                                                                    <span className="text-2xl font-black text-yellow-700 leading-none">{savingGrade}</span>
                                                                 </div>
                                                             </div>
                                                         )}
